@@ -88,6 +88,10 @@ impl AFLStat {
     pub fn parse(text: &str) -> Result<Self> {
         let mut d = HashMap::<String, String>::new();
         for ln in text.lines() {
+            if ln.trim().is_empty() {
+                continue;
+            }
+
             let ln_data: Vec<&str> = ln.split(':').map(|s| s.trim()).collect();
             if ln_data.len() != 2 {
                 return Err(Error::ParseError);
@@ -292,7 +296,77 @@ mod tests {
 
     #[test]
     fn parse_afl_stat_from_dict_ok() {
+        let mut d = HashMap::<String, String>::new();
+        d.insert(String::from("start_time"), String::from("1587396831"));
+        d.insert(String::from("last_update"), String::from("1587488608"));
+        d.insert(String::from("fuzzer_pid"), String::from("23661"));
+        d.insert(String::from("cycles_done"), String::from("1"));
+        d.insert(String::from("execs_done"), String::from("354214"));
+        d.insert(String::from("execs_per_sec"), String::from("3.86"));
+        d.insert(String::from("paths_total"), String::from("6204"));
+        d.insert(String::from("paths_favored"), String::from("631"));
+        d.insert(String::from("paths_found"), String::from("451"));
+        d.insert(String::from("paths_imported"), String::from("4642"));
+        d.insert(String::from("max_depth"), String::from("3"));
+        d.insert(String::from("cur_path"), String::from("2580"));
+        d.insert(String::from("pending_favs"), String::from("513"));
+        d.insert(String::from("pending_total"), String::from("5983"));
+        d.insert(String::from("variable_paths"), String::from("6198"));
+        d.insert(String::from("stability"), String::from("63.45%"));
+        d.insert(String::from("bitmap_cvg"), String::from("91.79%"));
+        d.insert(String::from("unique_crashes"), String::from("43"));
+        d.insert(String::from("unique_hangs"), String::from("245"));
+        d.insert(String::from("last_path"), String::from("1587488588"));
+        d.insert(String::from("last_crash"), String::from("1587487142"));
+        d.insert(String::from("last_hang"), String::from("1587486568"));
+        d.insert(String::from("execs_since_crash"), String::from("354214"));
+        d.insert(String::from("exec_timeout"), String::from("1000"));
+        d.insert(String::from("slowest_exec_ms"), String::from("1250"));
+        d.insert(String::from("peak_rss_mb"), String::from("0"));
+        d.insert(String::from("afl_banner"), String::from("fuzzer0"));
+        d.insert(String::from("afl_version"), String::from("++2.62c"));
+        d.insert(String::from("target_mode"), String::from("default"));
+        d.insert(String::from("command_line"), String::from("afl-fuzz arg1 arg2"));
+        let stat = AFLStat::parse_dict(&d).unwrap();
+        assert_correct_stat(&stat);
+    }
 
+    #[test]
+    fn parse_afl_stat_from_dict_bad() {
+        // The `stability` field is changed: the percentage sign (%) is removed.
+        // This should trigger an error from `AFLStat::parse_dict`.
+        let mut d = HashMap::<String, String>::new();
+        d.insert(String::from("start_time"), String::from("1587396831"));
+        d.insert(String::from("last_update"), String::from("1587488608"));
+        d.insert(String::from("fuzzer_pid"), String::from("23661"));
+        d.insert(String::from("cycles_done"), String::from("1"));
+        d.insert(String::from("execs_done"), String::from("354214"));
+        d.insert(String::from("execs_per_sec"), String::from("3.86"));
+        d.insert(String::from("paths_total"), String::from("6204"));
+        d.insert(String::from("paths_favored"), String::from("631"));
+        d.insert(String::from("paths_found"), String::from("451"));
+        d.insert(String::from("paths_imported"), String::from("4642"));
+        d.insert(String::from("max_depth"), String::from("3"));
+        d.insert(String::from("cur_path"), String::from("2580"));
+        d.insert(String::from("pending_favs"), String::from("513"));
+        d.insert(String::from("pending_total"), String::from("5983"));
+        d.insert(String::from("variable_paths"), String::from("6198"));
+        d.insert(String::from("stability"), String::from("63.45"));
+        d.insert(String::from("bitmap_cvg"), String::from("91.79%"));
+        d.insert(String::from("unique_crashes"), String::from("43"));
+        d.insert(String::from("unique_hangs"), String::from("245"));
+        d.insert(String::from("last_path"), String::from("1587488588"));
+        d.insert(String::from("last_crash"), String::from("1587487142"));
+        d.insert(String::from("last_hang"), String::from("1587486568"));
+        d.insert(String::from("execs_since_crash"), String::from("354214"));
+        d.insert(String::from("exec_timeout"), String::from("1000"));
+        d.insert(String::from("slowest_exec_ms"), String::from("1250"));
+        d.insert(String::from("peak_rss_mb"), String::from("0"));
+        d.insert(String::from("afl_banner"), String::from("fuzzer0"));
+        d.insert(String::from("afl_version"), String::from("++2.62c"));
+        d.insert(String::from("target_mode"), String::from("default"));
+        d.insert(String::from("command_line"), String::from("afl-fuzz arg1 arg2"));
+        assert!(AFLStat::parse_dict(&d).is_err());
     }
 
     #[test]
@@ -330,12 +404,16 @@ mod tests {
             command_line      : afl-fuzz arg1 arg2
         "#;
         let stat = AFLStat::parse(raw_stat).unwrap();
+        assert_correct_stat(&stat);
+    }
+
+    fn assert_correct_stat(stat: &AFLStat) {
         assert_eq!(1587396831, stat.start_time);
         assert_eq!(1587488608, stat.last_update);
         assert_eq!(23661, stat.fuzzer_pid);
         assert_eq!(1, stat.cycles_done);
         assert_eq!(354214, stat.execs_done);
-        assert_eq!(3.86, stat.execs_per_sec);
+        assert!((3.86 - stat.execs_per_sec).abs() < 1e-8);
         assert_eq!(6204, stat.paths_total);
         assert_eq!(631, stat.paths_favored);
         assert_eq!(451, stat.paths_found);
@@ -345,8 +423,8 @@ mod tests {
         assert_eq!(513, stat.pending_favs);
         assert_eq!(5983, stat.pending_total);
         assert_eq!(6198, stat.variable_paths);
-        assert_eq!(0.6345, stat.stability);
-        assert_eq!(0.9179, stat.bitmap_cvg);
+        assert!((0.6345 - stat.stability).abs() < 1e-8);
+        assert!((0.9179 - stat.bitmap_cvg).abs() < 1e-8);
         assert_eq!(43, stat.unique_crashes);
         assert_eq!(245, stat.unique_hangs);
         assert_eq!(1587488588, stat.last_path);
