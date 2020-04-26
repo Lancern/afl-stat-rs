@@ -1,5 +1,5 @@
 [package]
-name = "afl-stat-rs"
+name = "afl-stat"
 version = "0.1.0"
 authors = ["Lancern <msrlancern@126.com>"]
 edition = "2018"
